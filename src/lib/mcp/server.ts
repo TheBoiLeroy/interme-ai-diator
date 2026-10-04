@@ -20,6 +20,13 @@ import { viewHtml } from "./view";
 export const VIEW_URI = "ui://intermediary/view.html";
 const ui = { ui: { resourceUri: VIEW_URI } };
 
+// Accurate hints matter: per the MCP spec a tool that isn't read-only is assumed
+// destructive unless it says otherwise, and hosts gate destructive tools harder.
+const READ = { readOnlyHint: true, openWorldHint: false };
+const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const WRITE_IDEMPOTENT = { ...WRITE, idempotentHint: true };
+const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+
 type Ctx = { supabase: SupabaseClient; user: McpUser; appUrl: string };
 
 class UserError extends Error {}
@@ -371,7 +378,7 @@ export function buildServer(ctx: Ctx) {
       title: "List workspaces",
       description:
         "Show the user's Intermediary home: their workspaces, pending invitations, and a form to create a workspace.",
-      annotations: { readOnlyHint: true },
+      annotations: READ,
       _meta: ui,
     },
     guard(async () => {
@@ -389,7 +396,7 @@ export function buildServer(ctx: Ctx) {
         "Show a workspace dashboard: its artifacts, open proposals, and which ones wait on the user's vote. " +
         "workspace_id is optional when the user is in exactly one workspace.",
       inputSchema: z.object({ workspace_id: z.string().uuid().optional() }),
-      annotations: { readOnlyHint: true },
+      annotations: READ,
       _meta: ui,
     },
     guard(async ({ workspace_id }: { workspace_id?: string }) => {
@@ -406,7 +413,7 @@ export function buildServer(ctx: Ctx) {
       description:
         "Read an artifact (full content and summary), with its version history and open proposals. Defaults to the current official version; pass version for an older one.",
       inputSchema: z.object({ artifact_id: z.string().uuid(), version: z.number().int().positive().optional() }),
-      annotations: { readOnlyHint: true },
+      annotations: READ,
       _meta: ui,
     },
     guard(async ({ artifact_id, version }: { artifact_id: string; version?: number }) => {
@@ -429,7 +436,7 @@ export function buildServer(ctx: Ctx) {
       title: "Review proposal",
       description: "Show a proposal's summary, diff and votes so the user can review it.",
       inputSchema: z.object({ proposal_id: z.string().uuid() }),
-      annotations: { readOnlyHint: true },
+      annotations: READ,
       _meta: ui,
     },
     guard(async ({ proposal_id }: { proposal_id: string }) => {
@@ -450,7 +457,7 @@ export function buildServer(ctx: Ctx) {
         vote: z.enum(["approve", "reject"]),
         comment: z.string().max(2000).optional(),
       }),
-      annotations: { destructiveHint: false, idempotentHint: true },
+      annotations: WRITE_IDEMPOTENT,
       _meta: ui,
     },
     guard(async ({ proposal_id, vote, comment }: { proposal_id: string; vote: "approve" | "reject"; comment?: string }) => {
@@ -485,6 +492,7 @@ export function buildServer(ctx: Ctx) {
         content: z.string().min(1),
         summary: z.string().min(1).max(4000),
       }),
+      annotations: WRITE,
       _meta: ui,
     },
     guard(async (args: { workspace_id?: string; title: string; format: (typeof FORMATS)[number]; content: string; summary: string }) => {
@@ -521,6 +529,7 @@ export function buildServer(ctx: Ctx) {
         content: z.string().min(1),
         summary: z.string().min(1).max(4000),
       }),
+      annotations: WRITE,
       _meta: ui,
     },
     guard(async ({ artifact_id, content, summary }: { artifact_id: string; content: string; summary: string }) => {
@@ -580,6 +589,7 @@ export function buildServer(ctx: Ctx) {
       title: "Create workspace",
       description: "Create a new workspace (2–5 people). The user becomes its creator and can invite others.",
       inputSchema: z.object({ name: z.string().min(1).max(80) }),
+      annotations: WRITE,
       _meta: ui,
     },
     guard(async ({ name }: { name: string }) => {
@@ -605,6 +615,7 @@ export function buildServer(ctx: Ctx) {
         invite_link: z.string().max(500).optional(),
         invitation_id: z.string().uuid().optional(),
       }),
+      annotations: WRITE_IDEMPOTENT,
       _meta: ui,
     },
     guard(async ({ invite_link, invitation_id }: { invite_link?: string; invitation_id?: string }) => {
@@ -635,7 +646,7 @@ export function buildServer(ctx: Ctx) {
       description:
         "Show a workspace's members, pending invites and (for its creator) the shareable invite link, with controls to invite or remove people.",
       inputSchema: z.object({ workspace_id: z.string().uuid().optional() }),
-      annotations: { readOnlyHint: true },
+      annotations: READ,
       _meta: ui,
     },
     guard(async ({ workspace_id }: { workspace_id?: string }) => {
@@ -652,6 +663,7 @@ export function buildServer(ctx: Ctx) {
       description:
         "Invite someone to a workspace by email (creator only). They see the invite after signing in with that email. The app doesn't send email; share the invite link too.",
       inputSchema: z.object({ workspace_id: z.string().uuid(), email: z.string().email() }),
+      annotations: WRITE,
       _meta: ui,
     },
     guard(async ({ workspace_id, email }: { workspace_id: string; email: string }) => {
@@ -674,6 +686,7 @@ export function buildServer(ctx: Ctx) {
       title: "Revoke invite",
       description: "Cancel a pending email invite (creator only).",
       inputSchema: z.object({ workspace_id: z.string().uuid(), invite_id: z.string().uuid() }),
+      annotations: WRITE_IDEMPOTENT,
       _meta: ui,
     },
     guard(async ({ workspace_id, invite_id }: { workspace_id: string; invite_id: string }) => {
@@ -691,6 +704,7 @@ export function buildServer(ctx: Ctx) {
       title: "Reset invite link",
       description: "Replace the workspace's invite link; the old one stops working (creator only).",
       inputSchema: z.object({ workspace_id: z.string().uuid() }),
+      annotations: WRITE,
       _meta: ui,
     },
     guard(async ({ workspace_id }: { workspace_id: string }) => {
@@ -709,7 +723,7 @@ export function buildServer(ctx: Ctx) {
       description:
         "Remove someone from a workspace (creator only). Closes their open proposals, deletes their private threads there, and resets the invite link. Only call this when the user explicitly asks.",
       inputSchema: z.object({ workspace_id: z.string().uuid(), user_id: z.string().uuid() }),
-      annotations: { destructiveHint: true },
+      annotations: DESTRUCTIVE,
       _meta: ui,
     },
     guard(async ({ workspace_id, user_id }: { workspace_id: string; user_id: string }) => {
