@@ -39,15 +39,20 @@ Import the repo in Vercel (framework: Next.js, no build settings to change) and 
 
 `/api/mcp` is a remote MCP server (streamable HTTP, stateless) with an [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) UI. The connected AI acts as your private AI: it can read the team's artifacts, publish new ones, propose changes, and show an interactive review screen (diff + Approve/Reject) inline in the chat.
 
-| Tool | What it does | UI |
-|---|---|---|
-| `list_workspaces` | Workspaces you're in | |
-| `show_workspace` | Artifacts, open proposals, what's waiting on your vote | ✓ |
-| `get_artifact` | Current official version, full content | ✓ |
-| `review_proposal` | Summary, diff and votes | ✓ |
-| `cast_review` | Approve / reject (only when you say so) | ✓ |
-| `publish_artifact` | Share new work with the team | ✓ |
-| `propose_change` | Propose a new version of an artifact | ✓ |
+Everything can be done without leaving the chat. Tool results render one interactive view (home, workspace, members, artifact, proposal); its buttons call tools back, and "Ask Claude" boxes put a prepared request into the chat so Claude does edits, revisions and rebases itself.
+
+| Tool | What it does |
+|---|---|
+| `list_workspaces` | Home: your workspaces, pending invitations (Join), create a workspace, join by link |
+| `show_workspace` | Artifacts, open proposals, what's waiting on your vote, your proposals that need you |
+| `get_artifact` | Content, version history (older versions by number), open proposals on it |
+| `review_proposal` | Summary, diff / full proposed content, votes; Approve/Reject; revise or rebase via Claude |
+| `cast_review` | Approve / reject (only when you say so) |
+| `publish_artifact` | Share new work with the team |
+| `propose_change` | Propose a new version; also revises a rejected proposal or rebases one that needs it |
+| `create_workspace`, `join_workspace` | New workspace; join by invite link or accept an email invitation |
+| `show_members` | Members, pending invites, invite link (creator) |
+| `invite_member`, `revoke_invite`, `reset_invite_link`, `remove_member` | Team management (creator only; remove is destructive) |
 
 **Auth.** MCP clients sign in through Supabase Auth's OAuth 2.1 server, so they act as your existing account and every RLS rule still applies. The app serves the protected-resource metadata (`/.well-known/oauth-protected-resource/api/mcp`), verifies tokens against the project's JWKS, and hosts the consent screen at `/oauth/consent`. People can revoke connected apps under **AI keys**.
 

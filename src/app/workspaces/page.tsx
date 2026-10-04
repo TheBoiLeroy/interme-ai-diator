@@ -3,23 +3,20 @@ import { acceptInvite, createWorkspace, signOut } from "@/app/actions";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { requireUser } from "@/lib/supabase/server";
 
-type InviteRow = { id: string; workspaces: { name: string } | null };
+type InviteRow = { id: string; workspace_name: string };
 
 export default async function WorkspacesPage() {
   const { supabase, user } = await requireUser();
-  const [{ data: memberships }, { data: invites }] = await Promise.all([
+  const [{ data: memberships }, { data: inviteData }] = await Promise.all([
     supabase
       .from("workspace_members")
       .select("workspaces(id, name, created_at)")
       .eq("user_id", user.id)
       .returns<{ workspaces: { id: string; name: string } }[]>(),
-    supabase
-      .from("workspace_invites")
-      .select("id, workspaces(name)")
-      .ilike("email", user.email ?? "")
-      .is("accepted_at", null)
-      .returns<InviteRow[]>(),
+    // Invitees can't read the workspace row yet; this returns the name with each invite.
+    supabase.rpc("my_invitations"),
   ]);
+  const invites = inviteData as InviteRow[] | null;
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
@@ -37,7 +34,7 @@ export default async function WorkspacesPage() {
             {invites.map((inv) => (
               <li key={inv.id} className="card flex items-center justify-between">
                 <span>
-                  You&apos;re invited to <strong>{inv.workspaces?.name ?? "a workspace"}</strong>
+                  You&apos;re invited to <strong>{inv.workspace_name}</strong>
                 </span>
                 <form action={acceptInvite.bind(null, inv.id)}>
                   <SubmitButton pendingText="Joining…">Join</SubmitButton>
